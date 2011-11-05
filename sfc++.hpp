@@ -64,7 +64,7 @@ template<unsigned int Dimensions> class Sfc_internal
 public:
 
 	/*!
-	Clears stored mappings of 2d indices to 1d index.
+	Clears stored mappings of cells in user's grid to sfc indices.
 	*/
 	void clear_cache(void)
 	{
