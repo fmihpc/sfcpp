@@ -145,9 +145,11 @@ protected:
 		for (std::list<std::vector<unsigned int> >::iterator
 			item = this->coordinates.begin();
 			item != this->coordinates.end();
-			item++
 		) {
-			this->refine(item);
+			// the last one might get removed
+			std::list<std::vector<unsigned int> >::iterator to_refine = item;
+			item++;
+			this->refine(to_refine);
 		}
 	}
 
@@ -331,6 +333,11 @@ private:
 	}
 
 
+	/*!
+	Turns the sfc coordinate at given position into 4 or less longer coordinates.
+
+	Removes all new coordinates which are outside of the user's grid.
+	*/
 	void refine(std::list<std::vector<unsigned int> >::iterator position)
 	{
 		int orientation = this->get_orientation(*position);
@@ -347,6 +354,27 @@ private:
 				i--;
 			}
 
+		}
+		position++;
+
+		// remove those outside of the user's grid
+		for (i = 0; i < 4; i++) {
+			boost::array<unsigned int, 2> indices = this->get_indices(*position);
+			bool is_outside = false;
+			for (unsigned int dimension = 0; dimension < 2; dimension++) {
+				if (indices[dimension] >= this->length[dimension]) {
+					is_outside = true;
+					break;
+				}
+			}
+
+			if (is_outside) {
+				std::list<std::vector<unsigned int> >::iterator to_erase = position;
+				position++;
+				this->coordinates.erase(to_erase);
+			} else {
+				position++;
+			}
 		}
 	}
 
@@ -619,6 +647,11 @@ private:
 	}
 
 
+	/*!
+	Turns the sfc coordinate at given position into 8 or less longer coordinates.
+
+	Removes all new coordinates which are outside of the user's grid.
+	*/
 	void refine(std::list<std::vector<unsigned int> >::iterator position)
 	{
 		int orientation = this->get_orientation(*position);
@@ -635,6 +668,27 @@ private:
 				i--;
 			}
 
+		}
+		position++;
+
+		// remove those outside of the user's grid
+		for (i = 0; i < 8; i++) {
+			boost::array<unsigned int, 3> indices = this->get_indices(*position);
+			bool is_outside = false;
+			for (unsigned int dimension = 0; dimension < 3; dimension++) {
+				if (indices[dimension] >= this->length[dimension]) {
+					is_outside = true;
+					break;
+				}
+			}
+
+			if (is_outside) {
+				std::list<std::vector<unsigned int> >::iterator to_erase = position;
+				position++;
+				this->coordinates.erase(to_erase);
+			} else {
+				position++;
+			}
 		}
 	}
 
