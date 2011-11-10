@@ -3,7 +3,7 @@ SIZE:=4
 
 all: sfc++
 
-sfc++: sfc++.cpp sfc++.hpp
+sfc++: sfc++.cpp sfc++.hpp Makefile
 	g++ -DSIZE=$(SIZE) -I$$HOME/include -O3 -W -Wall -Wextra -pedantic sfc++.cpp -o sfc++
 
 c: clean
