@@ -75,12 +75,46 @@ public:
 	/*!
 	Caches all mappings between grid indices and sfc indices.
 
-	Use this if all of the sfc is going to be traversed and memory
+	Use this if most of the sfc is going to be traversed and memory
 	isn't a limiting factor.
 
-	Requires O(N) operations where N is the number of cells in the grid.
+	Requires O(N * log2(L)) operations where N is the number of
+	cells in the grid and L is the longest length of the grid
+	in indices between all dimensions.
 	*/
-	virtual void cache_all(void) = 0;
+	void cache_all(void)
+	{
+		assert(this->initialized);
+
+		this->cache_sfc_index_range(0, this->size() - 1);
+	};
+
+
+	/*!
+	Caches mappings between grid indices and given sfc index range inclusive.
+
+	Use this if only a certain range of the sfc is going to be
+	traversed or cacle_all would require too much memory.
+
+	Requires O(N * log2(L)) operations where N is the number of
+	indices in given range and L is the longest length of the grid
+	in indices between all dimensions.
+	*/
+	void cache_sfc_index_range(
+		const unsigned int index_start,
+		const unsigned int index_end
+	) {
+		assert(this->initialized);
+
+		if (index_start > index_end) {
+			std::cerr << __FILE__ << ":" << __LINE__
+				<< "index_start must be <= index_end"
+				<< std::endl;
+			abort();
+		}
+
+		this->calculate_indices_range(index_start, index_end);
+	};
 
 
 	/*!
@@ -312,9 +346,11 @@ protected:
 
 
 	/*!
-	Adds the indices in the user's grid corresponding to given sfc index into the cache.
+	Adds indices in the grid corresponding to given sfc index into the cache.
+
+	Returns the corresponding sfc coordinate.
 	*/
-	void calculate_indices(const unsigned int given_index)
+	std::list<std::vector<unsigned int> >::iterator calculate_indices(const unsigned int given_index)
 	{
 		if (given_index >= this->size()) {
 			std::cerr << __FILE__ << ":" << __LINE__
@@ -355,6 +391,48 @@ protected:
 		const boost::array<unsigned int, Dimensions>& indices = this->get_indices_from_coordinate(*position);
 		this->sfc_indices[sfc_index] = indices;
 		this->user_indices[indices] = sfc_index;
+
+		return position;
+	}
+
+
+	void calculate_indices_range(
+		const unsigned int index_start,
+		const unsigned int index_end
+	) {
+		if (index_start > index_end) {
+			std::cerr << __FILE__ << ":" << __LINE__
+				<< "index_start must be <= index_end"
+				<< std::endl;
+			abort();
+		}
+
+		const std::list<std::vector<unsigned int> >::iterator start_position = this->calculate_indices(index_start);
+
+		if (index_start == index_end) {
+			return;
+		}
+
+		// calculate last requested sfc index and all in between
+		unsigned int sfc_index = index_end;
+		std::list<std::vector<unsigned int> >::iterator position = this->calculate_indices(index_end);
+
+		position--;
+		while (position != start_position) {
+			unsigned int length = this->get_number_of_user_indices(*position);
+			while (length > 1) {
+				position = this->refine(position);
+				length = this->get_number_of_user_indices(*position);
+			}
+			sfc_index--;
+
+			const boost::array<unsigned int, Dimensions>& indices = this->get_indices_from_coordinate(*position);
+
+			this->sfc_indices[sfc_index] = indices;
+			this->user_indices[indices] = sfc_index;
+
+			position--;
+		}
 	}
 
 
@@ -470,62 +548,6 @@ public:
 		// TODO possible to move this into Sfc_internal?
 		this->fill_internal_arrays();
 		this->initialize(given_length);
-	}
-
-
-	/*!
-	This function is documented in the Sfc_internal class.
-	*/
-	void cache_all(void)
-	{
-		assert(this->initialized);
-		boost::array<unsigned int, 2> indices;
-
-		// create all sfc coordinates
-		for (unsigned int i = 0; i < this->refinement_level; i++) {
-			this->refine_all();
-		}
-
-		// initialize user_indices
-		// TODO generalize to N dimensions
-		for (unsigned int y = 0; y < this->length[1]; y++) {
-			indices[0] = y;
-			for (unsigned int x = 0; x < this->length[0]; x++) {
-				// TODO switch x and y
-				indices[1] = x;
-				this->user_indices[indices] = std::numeric_limits<unsigned int>::max();
-			}
-		}
-
-		// get the sfc coordinate of all cells in user's grid
-		boost::unordered_map<
-			std::vector<unsigned int>,
-			boost::array<unsigned int, 2>
-		> coord_to_indices;
-
-		for (unsigned int y = 0; y < this->length[1]; y++) {
-			indices[1] = y;
-			for (unsigned int x = 0; x < this->length[0]; x++) {
-				indices[0] = x;
-				coord_to_indices[this->get_coordinate(indices)] = indices;
-			}
-		}
-
-		// fill out the order in which sfc traverses the 2d indices
-		int sfc_index = 0;
-		for (std::list<std::vector<unsigned int> >::const_iterator
-			coordinate = this->coordinates.begin();
-			coordinate != this->coordinates.end();
-			coordinate++
-		) {
-			if (coord_to_indices.count(*coordinate) == 0) {
-				continue;
-			}
-
-			this->user_indices[coord_to_indices.at(*coordinate)] = sfc_index;
-			this->sfc_indices[sfc_index] = coord_to_indices.at(*coordinate);
-			sfc_index++;
-		}
 	}
 
 
@@ -747,63 +769,6 @@ public:
 		// TODO possible to move this into Sfc_internal?
 		this->fill_internal_arrays();
 		this->initialize(given_length);
-	}
-
-
-	void cache_all(void)
-	{
-		assert(this->initialized);
-		boost::array<unsigned int, 3> indices;
-
-		// create all sfc coordinates
-		for (unsigned int i = 0; i < this->refinement_level; i++) {
-			this->refine_all();
-		}
-
-		// initialize user_indices
-		// TODO generalize to N dimensions
-		for (unsigned int z = 0; z < this->length[2]; z++) {
-			indices[0] = z;
-			for (unsigned int y = 0; y < this->length[1]; y++) {
-				indices[1] = y;
-				for (unsigned int x = 0; x < this->length[0]; x++) {
-					indices[2] = x;
-					this->user_indices[indices] = std::numeric_limits<unsigned int>::max();
-				}
-			}
-		}
-
-		// get the sfc coordinate of all cells in user's grid
-		boost::unordered_map<
-			std::vector<unsigned int>,
-			boost::array<unsigned int, 3>
-		> coord_to_indices;
-
-		for (unsigned int z = 0; z < this->length[2]; z++) {
-			indices[2] = z;
-			for (unsigned int y = 0; y < this->length[1]; y++) {
-				indices[1] = y;
-				for (unsigned int x = 0; x < this->length[0]; x++) {
-					indices[0] = x;
-					coord_to_indices[this->get_coordinate(indices)] = indices;
-				}
-			}
-		}
-
-		// fill out the order in which sfc traverses the 2d indices
-		int sfc_index = 0;
-		for (std::list<std::vector<unsigned int> >::const_iterator
-			coordinate = this->coordinates.begin();
-			coordinate != this->coordinates.end();
-			coordinate++
-		) {
-			if (coord_to_indices.count(*coordinate) == 0) {
-				continue;
-			}
-
-			this->user_indices[coord_to_indices.at(*coordinate)] = sfc_index;
-			sfc_index++;
-		}
 	}
 
 

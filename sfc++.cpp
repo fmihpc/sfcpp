@@ -41,6 +41,9 @@ int main(void)
 	boost::array<unsigned int, 2> indices2d = boost::assign::list_of(width)(height);
 	Sfc<2> mapping2d(indices2d);
 
+	// precalculate sfc mapping of the whole grid
+	mapping2d.cache_all();
+
 	cout << "The cell at the lower left corner in the following will be the " << mapping2d.get_sfc_index(boost::assign::list_of(0)(0)) + 1
 		<< "th cell visited by the space-filling curve."
 		<< endl << endl;
@@ -82,6 +85,9 @@ int main(void)
 	// test 3d coordinate traversal
 	boost::array<unsigned int, 3> indices3d = boost::assign::list_of(width)(height)(depth);
 	Sfc<3> mapping3d(indices3d);
+
+	// precalculate sfc mapping of the whole grid
+	mapping3d.cache_all();
 
 	ofstream traversal3d_file("3d.dat");
 	for (unsigned int sfc_index = 0; sfc_index < mapping3d.size(); sfc_index++) {
