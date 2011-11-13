@@ -1,4 +1,4 @@
-/*!
+/*
 A class for mapping 2 and 3 dimensional data into 1 dimension.
 
 Copyright 2010, 2011 Ilja Honkonen
@@ -14,7 +14,13 @@ GNU Lesser General Public License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
 
+/*!
+\mainpage sfc++
+
+\section intro_sec Introduction
+A class for mapping 2 and 3 dimensional data into 1 dimension.
 
 Data is mapped so that neighboring cells in > 1d are also quite close
 neighbors in 1d. Based on the following paper:
@@ -57,6 +63,9 @@ namespace sfc {
 
 /*!
 A class for internal variables and functions with trivial or no dimensional dependence.
+
+Doesn't implement all functions so use the Sfc class in 2d or 3d instead.
+Functions common to both dimensions are documented here though.
 */
 template<unsigned int Dimensions> class Sfc_internal
 {
@@ -64,32 +73,89 @@ template<unsigned int Dimensions> class Sfc_internal
 public:
 
 	/*!
-	Clears stored mappings of cells in user's grid to sfc indices.
+	Caches all mappings between grid indices and sfc indices.
+
+	Use this if all of the sfc is going to be traversed and memory
+	isn't a limiting factor.
+
+	Requires O(N) operations where N is the number of cells in the grid.
 	*/
-	void clear_cache(void)
+	virtual void cache_all(void) = 0;
+
+
+	/*!
+	Removes all mappings between grid indices and sfc indices from the cache.
+	*/
+	void clear(void)
 	{
-		assert(this->initialized);
 		this->user_indices.clear();
+		this->sfc_indices.clear();
 	}
 
 
 	/*!
-	Returns the index in 1 dimension of a cell with given indinces.
+	Removes the mapping between given indices and an sfc index from the cache.
+	*/
+	void clear(const boost::array<unsigned int, Dimensions>& given_indices)
+	{
+		this->user_indices.erase(given_indices);
+	}
 
+
+	/*!
+	Removes the mapping between given sfc index and grid indices from the cache.
+	*/
+	void clear(const unsigned int given_index)
+	{
+		this->sfc_indices.erase(given_index);
+	}
+
+
+	/*!
+	Returns the size of the grid in cells.
+	*/
+	unsigned int size(void) const
+	{
+		unsigned int result = 1;
+		for (unsigned int dimension = 0; dimension < Dimensions; dimension++) {
+			result *= this->length[dimension];
+		}
+		return result;
+	}
+
+
+	/*!
+	Returns the sfc index of given indices in the grid.
+
+	Given the indices for a cell in the grid returns the corresponding index in the
+	space-filling curve. For example the following figure shows the grid indices
+	and the corresponding sfc indices inside the cells of a 2 by 2 grid:
+\verbatim
+y
+
+^
+|
+ -----
+1|1|0|
+ -----
+0|2|3|
+ -----
+  0 1 -> x
+\endverbatim
+
+	Requires O(2N * log2(L)) operations where N is the number of sfc coordinates
+	(~cached mappings of grid indices to sfc indices) and and L is the longest
+	length of the grid in indices between all dimensions.
+
+	The returned value is also cached for faster access later.
 	Indices start at 0.
 	*/
-	unsigned int get_index(const boost::array<unsigned int, Dimensions>& given_indices)
+	unsigned int get_sfc_index(const boost::array<unsigned int, Dimensions>& given_indices)
 	{
 		assert(this->initialized);
 
 		if (this->user_indices.count(given_indices) == 0) {
-			std::cerr << __FILE__ << ":" << __LINE__ << " ";
-			for (unsigned int i = 0; i < Dimensions; i++) {
-				std::cerr << given_indices[i] << " ";
-			}
-			std::cerr << std::endl;
-			assert(false);
-			//this->calculate_index(given_indices);
+			this->calculate_sfc_index(given_indices);
 		}
 
 		return this->user_indices.at(given_indices);
@@ -97,13 +163,20 @@ public:
 
 
 	/*!
-	Returns internal sfc coordinate traversal order.
+	Returns the indices in the grid of given sfc index.
 
-	Might be empty.
+	The returned value is also cached for faster access later.
+	Indices start at 0.
 	*/
-	const std::list<std::vector<unsigned int> >& get_coordinates(void)
+	boost::array<unsigned int, Dimensions> get_indices(const unsigned int given_index)
 	{
-		return this->coordinates;
+		assert(this->initialized);
+
+		if (this->sfc_indices.count(given_index) == 0) {
+			this->calculate_indices(given_index);
+		}
+
+		return this->sfc_indices.at(given_index);
 	}
 
 
@@ -126,9 +199,12 @@ protected:
 	// sfc coordinates in the order as they are traversed
 	std::list<std::vector<unsigned int> > coordinates;
 
-	// calculated mappings between cell indeices of user's grid and 1d sfc indices
+	// calculated mappings between cell indices of user's grid and sfc indices
 	boost::unordered_map<boost::array<unsigned int, Dimensions>, unsigned int> user_indices;
-	//boost::unordered_map<unsigned int, boost::unordered_map<unsigned int, unsigned int> > user_indices;
+
+	// calculated mappings between sfc indices and cell indices of the user's grid
+	boost::unordered_map<unsigned int, boost::array<unsigned int, Dimensions> > sfc_indices;
+	// TODO use boost::bimap for the above two?
 
 
 	// fille order and orientation arrays
@@ -136,29 +212,22 @@ protected:
 
 
 	// turns one sfc coordinate into 2^d where d is the number of dimensions
-	virtual void refine(std::list<std::vector<unsigned int> >::iterator position) = 0;
+	virtual std::list<std::vector<unsigned int> >::iterator refine(std::list<std::vector<unsigned int> >::iterator position) = 0;
 
 
-	// refines all sfc coordinates once
-	void refine_all(void)
-	{
-		for (std::list<std::vector<unsigned int> >::iterator
-			item = this->coordinates.begin();
-			item != this->coordinates.end();
-		) {
-			// the last one might get removed
-			std::list<std::vector<unsigned int> >::iterator to_refine = item;
-			item++;
-			this->refine(to_refine);
-		}
-	}
+	/*!
+	Returns the indices in user's grid of given sfc coordinate.
+
+	If the given coordinate spans more than one set of indices
+	the one closest to (0, 0) is returned.
+	*/
+	virtual boost::array<unsigned int, Dimensions>
+	get_indices_from_coordinate(const std::vector<unsigned int>& coordinate) = 0;
 
 
-	// calculates and stores the mapped 1d index of all cell in the user's grid
-	virtual void cache_all(void) = 0;
-
-
-	// prepares the class for use
+	/*!
+	Sets the unropped length of the grid, sets the initial coordinate, etc.
+	*/
 	void initialize(const boost::array<unsigned int, Dimensions>& given_length)
 	{
 		for (unsigned int i = 0; i < Dimensions; i++) {
@@ -182,45 +251,231 @@ protected:
 			longest_dimension = std::max(longest_dimension, this->length[i]);
 		}
 
-		while ((1u << this->refinement_level) < longest_dimension) {
+		while (((unsigned int)1 << this->refinement_level) < longest_dimension) {
 			this->refinement_level++;
 		}
 
 		this->uncropped_length = (1 << this->refinement_level);
 
 		this->initialized = true;
-		this->cache_all();
+	}
+
+
+	// refines all sfc coordinates once
+	void refine_all(void)
+	{
+		for (std::list<std::vector<unsigned int> >::iterator
+			item = this->coordinates.begin();
+			item != this->coordinates.end();
+		) {
+			item = this->refine(item);
+			item++;
+		}
+	}
+
+
+	/*!
+	Returns the 1d length of given coordinate in indices of the user's grid.
+	*/
+	unsigned int get_length_in_user_indices(const std::vector<unsigned int>& coordinate) const
+	{
+		return this->uncropped_length / ((unsigned int)1 << coordinate.size());
+	}
+
+
+	/*!
+	Returns the number of cells in the user's grid that the given coordinate encompases.
+	*/
+	unsigned int get_number_of_user_indices(const std::vector<unsigned int>& coordinate)
+	{
+		const unsigned int length = this->get_length_in_user_indices(coordinate);
+		if (length == 0 || length > this->uncropped_length) {
+			std::cerr << __FILE__ << ":" << __LINE__
+				<< "Invalid length in indices: " << length
+				<< std::endl;
+			abort();
+		}
+
+		const boost::array<unsigned int, Dimensions>& indices = this->get_indices_from_coordinate(coordinate);
+
+		unsigned int number_of = 1;
+		for (unsigned int dimension = 0; dimension < Dimensions; dimension++) {
+			if (this->length[dimension] <= indices[dimension]) {
+				return 0;
+			}
+
+			number_of *= std::min(length, this->length[dimension] - indices[dimension]);
+		}
+
+		return number_of;
+	}
+
+
+	/*!
+	Adds the indices in the user's grid corresponding to given sfc index into the cache.
+	*/
+	void calculate_indices(const unsigned int given_index)
+	{
+		if (given_index >= this->size()) {
+			std::cerr << __FILE__ << ":" << __LINE__
+				<< "Given index is outside of the grid: " << given_index
+				<< std::endl;
+			abort();
+		}
+
+		std::list<std::vector<unsigned int> >::iterator position = this->coordinates.begin();
+		unsigned int length = this->get_number_of_user_indices(*position);
+		unsigned int sfc_index = 0;
+
+		// find the coordinate with given sfc index inside
+		while (!(sfc_index <= given_index
+		&& sfc_index + length > given_index)) {
+			sfc_index += length;
+			position++;
+			length = this->get_number_of_user_indices(*position);
+		}
+
+		// refine the coordinate until it represents only one sfc index
+		while (length > 1) {
+			sfc_index += length;
+			position = this->refine(position);
+			length = this->get_number_of_user_indices(*position);
+			sfc_index -= length;
+
+			// find the coordinate with given indices inside			
+			while (!(sfc_index <= given_index
+			&& sfc_index + length > given_index)) {
+				position--;
+				length = this->get_number_of_user_indices(*position);
+				sfc_index -= length;
+			}
+		}
+
+		// calculate indices in the user's grid corresponding to given sfc index
+		const boost::array<unsigned int, Dimensions>& indices = this->get_indices_from_coordinate(*position);
+		this->sfc_indices[sfc_index] = indices;
+		this->user_indices[indices] = sfc_index;
+	}
+
+
+	/*!
+	Adds the sfc index of given indices in the user's grid into the cache.
+	*/
+	void calculate_sfc_index(const boost::array<unsigned int, Dimensions>& given_indices)
+	{
+		for (unsigned int dimension = 0; dimension < Dimensions; dimension++) {
+			if (given_indices[dimension] >= this->length[dimension]) {
+				std::cerr << __FILE__ << ":" << __LINE__
+					<< "Invalid index in dimension " << dimension
+					<< ": " << given_indices[dimension]
+					<< std::endl;
+				abort();
+			}
+		}
+
+		std::list<std::vector<unsigned int> >::iterator position = this->coordinates.begin();
+		unsigned int length = this->get_length_in_user_indices(*position);
+		boost::array<unsigned int, Dimensions> indices = this->get_indices_from_coordinate(*position);
+
+		// find the coordinate with given indices inside
+		while (!this->cells_overlap(indices, length, given_indices)) {
+			position++;
+			length = this->get_length_in_user_indices(*position);
+			indices = this->get_indices_from_coordinate(*position);
+		}
+
+		// refine the coordinate until it represents only one set of user indices
+		while (length > 1) {
+			position = this->refine(position);
+			length = this->get_length_in_user_indices(*position);
+			indices = this->get_indices_from_coordinate(*position);
+
+			// find the coordinate with given indices inside			
+			while (!this->cells_overlap(indices, length, given_indices)) {
+				position--;
+				indices = this->get_indices_from_coordinate(*position);
+			}
+		}
+
+		// calculate the sfc index of found coordinate
+		int sfc_index = 0;
+		std::list<std::vector<unsigned int> >::iterator temp = this->coordinates.begin();
+		while (temp != position) {
+			sfc_index += get_number_of_user_indices(*temp);
+			temp++;
+		}
+
+		this->user_indices[given_indices] = sfc_index;
+		this->sfc_indices[sfc_index] = given_indices;
+	}
+
+
+	/*!
+	Returns true if cell2 is inside cell1.
+
+	indices1 is the starting point of cell1 in the grid (closest to origin).
+	length1 is the length of cell1 in indices in every dimension.
+	The length in indices of cell2 is assumed to be 1.
+	*/
+	bool cells_overlap(
+		const boost::array<unsigned int, Dimensions>& indices1,
+		const unsigned int length1,
+		const boost::array<unsigned int, Dimensions>& indices2
+	) const
+	{
+		for (unsigned int dimension = 0; dimension < Dimensions; dimension++) {
+			if (!(indices1[dimension] <= indices2[dimension]
+			&& indices1[dimension] + length1 > indices2[dimension])) {
+				return false;
+			}
+		}
+
+		return true;
 	}
 };
 
 
 /*!
-The general version doesn't do anything.
+This version doesn't do anything.
 
+See documentation of Sfc<2> and Sfc<3> specializations.
 Patches implementing this for N dimensions more than welcome :)
 */
 template<unsigned int Dimensions> class Sfc : public Sfc_internal<Dimensions> {};
 
 
 /*!
-Class for mapping the cells of 2-dimensional grid to 1 dimension.
-
-Neighboring cells in 2d are also quite close in 1d.
-They are closest when the given grid is of equal length in
-cells in each dimension and a power of 2.
+Class for mapping the cells of a 2-dimensional grid to 1 dimension.
 */
 template<> class Sfc<2> : public Sfc_internal<2>
 {
 
 public:
 
+	/*!
+	Initializes a sfc mapping for a 2d grid of given size in indices.
+
+	Best results (e.g. neighboring cells in 2d are closest in 1d) are
+	obtained if given lengths are powers of 2. Results are probably
+	also as good if given lengths are multiples of 2. Otherwise some
+	cells' neighbors in 2d might be a few cells further away than
+	usual in 1d.
+
+	If the whole sfc is going to be traversed and memory is not a
+	limiting factor the fastest way to calculate all the mappings
+	is to use the cache_all method.
+	*/
 	Sfc(const boost::array<unsigned int, 2>& given_length)
 	{
+		// TODO possible to move this into Sfc_internal?
 		this->fill_internal_arrays();
 		this->initialize(given_length);
 	}
 
 
+	/*!
+	This function is documented in the Sfc_internal class.
+	*/
 	void cache_all(void)
 	{
 		assert(this->initialized);
@@ -268,15 +523,42 @@ public:
 			}
 
 			this->user_indices[coord_to_indices.at(*coordinate)] = sfc_index;
+			this->sfc_indices[sfc_index] = coord_to_indices.at(*coordinate);
 			sfc_index++;
 		}
 	}
 
 
-	/*!
-	Returns the indices in user's grid of given sfc coordinate.
+
+private:
+
+	/*
+	The logic for using these is described in
+	http://j.teresco.org//research/publications/octpart02/octpart02.pdf
 	*/
-	boost::array<unsigned int, 2> get_indices(const std::vector<unsigned int>& coordinate)
+	boost::array<boost::array<unsigned int, 4>, 4> order;
+	boost::array<boost::array<unsigned int, 4>, 4> orientation;
+
+	void fill_internal_arrays(void)
+	{
+		this->order = boost::assign::list_of
+			(boost::assign::list_of(0u)(1u)(3u)(2u))
+			(boost::assign::list_of(0u)(2u)(3u)(1u))
+			(boost::assign::list_of(3u)(1u)(0u)(2u))
+			(boost::assign::list_of(3u)(2u)(0u)(1u));
+
+		this->orientation = boost::assign::list_of
+			(boost::assign::list_of(1u)(0u)(0u)(2u))
+			(boost::assign::list_of(0u)(1u)(1u)(3u))
+			(boost::assign::list_of(3u)(2u)(2u)(0u))
+			(boost::assign::list_of(2u)(3u)(3u)(1u));
+	}
+
+
+	/*!
+	Returns the indices in the grid of given sfc coordinate.
+	*/
+	boost::array<unsigned int, 2> get_indices_from_coordinate(const std::vector<unsigned int>& coordinate)
 	{
 		// current location
 		boost::array<unsigned int, 2> location = boost::assign::list_of(0)(0);
@@ -311,34 +593,13 @@ public:
 	}
 
 
-
-private:
-
-	boost::array<boost::array<unsigned int, 4>, 4> order;
-	boost::array<boost::array<unsigned int, 4>, 4> orientation;
-
-	void fill_internal_arrays(void)
-	{
-		this->order = boost::assign::list_of
-			(boost::assign::list_of(0u)(1u)(3u)(2u))
-			(boost::assign::list_of(0u)(2u)(3u)(1u))
-			(boost::assign::list_of(3u)(1u)(0u)(2u))
-			(boost::assign::list_of(3u)(2u)(0u)(1u));
-
-		this->orientation = boost::assign::list_of
-			(boost::assign::list_of(1u)(0u)(0u)(2u))
-			(boost::assign::list_of(0u)(1u)(1u)(3u))
-			(boost::assign::list_of(3u)(2u)(2u)(0u))
-			(boost::assign::list_of(2u)(3u)(3u)(1u));
-	}
-
-
 	/*!
 	Turns the sfc coordinate at given position into 4 or less longer coordinates.
 
 	Removes all new coordinates which are outside of the user's grid.
+	Returns an iterator to the last created coordinate.
 	*/
-	void refine(std::list<std::vector<unsigned int> >::iterator position)
+	std::list<std::vector<unsigned int> >::iterator refine(std::list<std::vector<unsigned int> >::iterator position)
 	{
 		int orientation = this->get_orientation(*position);
 
@@ -357,9 +618,11 @@ private:
 		}
 		position++;
 
+		std::list<std::vector<unsigned int> >::iterator last_created = position;
+
 		// remove those outside of the user's grid
 		for (i = 0; i < 4; i++) {
-			boost::array<unsigned int, 2> indices = this->get_indices(*position);
+			boost::array<unsigned int, 2> indices = this->get_indices_from_coordinate(*position);
 			bool is_outside = false;
 			for (unsigned int dimension = 0; dimension < 2; dimension++) {
 				if (indices[dimension] >= this->length[dimension]) {
@@ -373,9 +636,12 @@ private:
 				position++;
 				this->coordinates.erase(to_erase);
 			} else {
+				last_created = position;
 				position++;
 			}
 		}
+
+		return last_created;
 	}
 
 
@@ -456,19 +722,29 @@ private:
 
 
 /*!
-Class for mapping the cells of 3-dimensional grid to 1 dimension.
-
-Neighboring cells in 3d are also quite close in 1d.
-They are closest when the given grid is of equal length in
-cells in each dimension and a power of 2.
+Class for mapping the cells of a 3-dimensional grid to 1 dimension.
 */
 template<> class Sfc<3> : public Sfc_internal<3>
 {
 
 public:
 
+	/*!
+	Initializes a sfc mapping for a 3d grid of given size in indices.
+
+	Best results (e.g. neighboring cells in 3d are closest in 1d) are
+	obtained if given lengths are powers of 2. Results are probably
+	also as good if given lengths are multiples of 2. Otherwise some
+	cells' neighbors in 3d might be a few cells further away than
+	usual in 1d.
+
+	If the whole sfc is going to be traversed and memory is not a
+	limiting factor the fastest way to calculate all the mappings
+	is to use the cache_all method.
+	*/
 	Sfc(const boost::array<unsigned int, 3>& given_length)
 	{
+		// TODO possible to move this into Sfc_internal?
 		this->fill_internal_arrays();
 		this->initialize(given_length);
 	}
@@ -531,63 +807,13 @@ public:
 	}
 
 
-	/*!
-	Returns the indices in user's grid of given sfc coordinate.
-	*/
-	boost::array<unsigned int, 3> get_indices(const std::vector<unsigned int>& coordinate)
-	{
-		// current location
-		boost::array<unsigned int, 3> location = boost::assign::list_of(0)(0)(0);
-		unsigned int location_diff = this->uncropped_length / 2;
-
-		BOOST_FOREACH(unsigned int number, coordinate) {
-			switch (number) {
-			case 0:
-				location[0] += location_diff;
-				location[1] += location_diff;
-				location[2] += location_diff;
-				break;
-			case 1:
-				location[1] += location_diff;
-				location[2] += location_diff;
-				break;
-			case 2:
-				location[0] += location_diff;
-				location[2] += location_diff;
-				break;
-			case 3:
-				location[2] += location_diff;
-				break;
-			case 4:
-				location[0] += location_diff;
-				location[1] += location_diff;
-				break;
-			case 5:
-				location[1] += location_diff;
-				break;
-			case 6:
-				location[0] += location_diff;
-				break;
-			case 7:
-				break;
-			default:
-				std::cerr << __FILE__ << ":" << __LINE__
-					<< "Invalid number in coordinate: " << number
-					<< std::endl;
-				abort();
-				break;
-			}
-
-			location_diff /= 2;
-		}
-
-		return location;
-	}
-
-
 
 private:
 
+	/*
+	The logic for using these is described in
+	http://j.teresco.org//research/publications/octpart02/octpart02.pdf
+	*/
 	boost::array<boost::array<unsigned int, 8>, 24> order;
 	boost::array<boost::array<unsigned int, 8>, 24> orientation;
 
@@ -648,11 +874,65 @@ private:
 
 
 	/*!
+	Returns the indices in the grid of given sfc coordinate.
+	*/
+	boost::array<unsigned int, 3> get_indices_from_coordinate(const std::vector<unsigned int>& coordinate)
+	{
+		// current location
+		boost::array<unsigned int, 3> location = boost::assign::list_of(0)(0)(0);
+		unsigned int location_diff = this->uncropped_length / 2;
+
+		BOOST_FOREACH(unsigned int number, coordinate) {
+			switch (number) {
+			case 0:
+				location[0] += location_diff;
+				location[1] += location_diff;
+				location[2] += location_diff;
+				break;
+			case 1:
+				location[1] += location_diff;
+				location[2] += location_diff;
+				break;
+			case 2:
+				location[0] += location_diff;
+				location[2] += location_diff;
+				break;
+			case 3:
+				location[2] += location_diff;
+				break;
+			case 4:
+				location[0] += location_diff;
+				location[1] += location_diff;
+				break;
+			case 5:
+				location[1] += location_diff;
+				break;
+			case 6:
+				location[0] += location_diff;
+				break;
+			case 7:
+				break;
+			default:
+				std::cerr << __FILE__ << ":" << __LINE__
+					<< "Invalid number in coordinate: " << number
+					<< std::endl;
+				abort();
+				break;
+			}
+
+			location_diff /= 2;
+		}
+
+		return location;
+	}
+
+
+	/*!
 	Turns the sfc coordinate at given position into 8 or less longer coordinates.
 
 	Removes all new coordinates which are outside of the user's grid.
 	*/
-	void refine(std::list<std::vector<unsigned int> >::iterator position)
+	std::list<std::vector<unsigned int> >::iterator refine(std::list<std::vector<unsigned int> >::iterator position)
 	{
 		int orientation = this->get_orientation(*position);
 
@@ -671,9 +951,11 @@ private:
 		}
 		position++;
 
+		std::list<std::vector<unsigned int> >::iterator last_created = position;
+
 		// remove those outside of the user's grid
 		for (i = 0; i < 8; i++) {
-			boost::array<unsigned int, 3> indices = this->get_indices(*position);
+			boost::array<unsigned int, 3> indices = this->get_indices_from_coordinate(*position);
 			bool is_outside = false;
 			for (unsigned int dimension = 0; dimension < 3; dimension++) {
 				if (indices[dimension] >= this->length[dimension]) {
@@ -687,9 +969,12 @@ private:
 				position++;
 				this->coordinates.erase(to_erase);
 			} else {
+				last_created = position;
 				position++;
 			}
 		}
+
+		return last_created;
 	}
 
 

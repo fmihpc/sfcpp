@@ -41,17 +41,18 @@ int main(void)
 	boost::array<unsigned int, 2> indices2d = boost::assign::list_of(width)(height);
 	Sfc<2> mapping2d(indices2d);
 
-	cout << "The cell at the lower left corner in the following will be the " << mapping2d.get_index(boost::assign::list_of(0)(0)) + 1
+	cout << "The cell at the lower left corner in the following will be the " << mapping2d.get_sfc_index(boost::assign::list_of(0)(0)) + 1
 		<< "th cell visited by the space-filling curve."
 		<< endl << endl;
 
+	// test 2d index traversal
 	cout << "Cell traversal order in a " << width << " by " << height << " grid:" << endl;
 	unsigned int y = height - 1;
 	while (true) {
 		indices2d[1] = y;
 		for (unsigned int x = 0; x < width; x++) {
 			indices2d[0] = x;
-			cout << setw(4) << setfill(' ') << mapping2d.get_index(indices2d);
+			cout << setw(4) << setfill(' ') << mapping2d.get_sfc_index(indices2d);
 		}
 		cout << endl;
 
@@ -63,14 +64,11 @@ int main(void)
 	}
 	cout << endl << endl;
 
-	// test 2d coordinate traversal
-	int step = 0;
+	// test 2d sfc traversal
 	ofstream traversal2d_file("2d.dat");
-	const std::list<std::vector<unsigned int> > coordinates2d = mapping2d.get_coordinates();
-	BOOST_FOREACH(std::vector<unsigned int> coordinate, coordinates2d) {
-		boost::array<unsigned int, 2> indices = mapping2d.get_indices(coordinate);
-		traversal2d_file << indices[0] << "\t" << indices[1] << "\t" << step << endl;
-		step++;
+	for (unsigned int sfc_index = 0; sfc_index < mapping2d.size(); sfc_index++) {
+		const boost::array<unsigned int, 2> indices = mapping2d.get_indices(sfc_index);
+		traversal2d_file << indices[0] << "\t" << indices[1] << "\t" << sfc_index << endl;
 	}
 	traversal2d_file.close();
 
@@ -85,17 +83,14 @@ int main(void)
 	boost::array<unsigned int, 3> indices3d = boost::assign::list_of(width)(height)(depth);
 	Sfc<3> mapping3d(indices3d);
 
-	step = 0;
 	ofstream traversal3d_file("3d.dat");
-	const std::list<std::vector<unsigned int> > coordinates3d = mapping3d.get_coordinates();
-	BOOST_FOREACH(std::vector<unsigned int> coordinate, coordinates3d) {
-		boost::array<unsigned int, 3> indices = mapping3d.get_indices(coordinate);
+	for (unsigned int sfc_index = 0; sfc_index < mapping3d.size(); sfc_index++) {
+		boost::array<unsigned int, 3> indices = mapping3d.get_indices(sfc_index);
 		traversal3d_file << indices[0] << "\t"
 			<< indices[1] << "\t"
 			<< indices[2] << "\t"
-			<< step
+			<< sfc_index
 			<< endl;
-		step++;
 	}
 	traversal3d_file.close();
 
