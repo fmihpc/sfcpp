@@ -119,12 +119,17 @@ public:
 
 
 	/*!
-	Removes all mappings between grid indices and sfc indices from the cache.
+	Removes all stored information.
+
+	Removes mappings between grid indices and sfc indices
+	and calculated sfc coordinates.
 	*/
 	void clear(void)
 	{
 		this->user_indices.clear();
 		this->sfc_indices.clear();
+		this->coordinates.clear();
+		this->coordinates.insert(this->coordinates.begin(), std::vector<unsigned int>());
 	}
 
 
