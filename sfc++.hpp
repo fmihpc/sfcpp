@@ -373,6 +373,7 @@ protected:
 		while (!(sfc_index <= given_index
 		&& sfc_index + length > given_index)) {
 			sfc_index += length;
+			// FIXME: goes out of the list if given_index == last index
 			position++;
 			length = this->get_number_of_user_indices(*position);
 		}
