@@ -90,7 +90,7 @@ int main(void)
 
 	// cache grid <-> sfc mapping in parallel using several Sfc instances
 	vector<Sfc<3> > mappings;
-	// thread n caches from index_rages[i].first to index_ranges[i].second
+	// thread i caches from index_rages[i].first to index_ranges[i].second
 	vector<pair<unsigned int, unsigned int> > index_ranges;
 
 	const time_t before_parallel = time(NULL);
