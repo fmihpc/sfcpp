@@ -111,5 +111,24 @@ int main(void)
 
 	cout << "Change the grid size by defining SIZE when compiling, e.g. make SIZE=8" << endl;
 
+
+	// test += operator
+	Sfc<3> mapping_for_operator(indices3d);
+	mapping_for_operator += mapping3d;
+	for (unsigned int sfc_index = 0; sfc_index < mapping_for_operator.size(); sfc_index++) {
+		if (!mapping_for_operator.is_cached(sfc_index)) {
+			cerr << "Sfc index " << sfc_index << " not cached" << endl;
+			exit(EXIT_FAILURE);
+		}
+
+		boost::array<unsigned int, 3> indices1 = mapping3d.get_indices(sfc_index);
+		boost::array<unsigned int, 3> indices2 = mapping_for_operator.get_indices(sfc_index);
+
+		if (indices1 != indices2) {
+			cerr << "Sfc index " << sfc_index << " incorrect after operator +=" << endl;
+			exit(EXIT_FAILURE);
+		}
+	}
+
 	return EXIT_SUCCESS;
 }
