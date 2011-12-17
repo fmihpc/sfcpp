@@ -63,12 +63,12 @@ namespace boost {
 namespace sfc {
 
 /*!
-A class for internal variables and functions with trivial or no dimensional dependence.
+A class for Sfc variables and functions with trivial or no dimensional dependence.
 
 Doesn't implement all functions so use the Sfc class in 2d or 3d instead.
 Functions common to both dimensions are documented here though.
 */
-template<unsigned int Dimensions, class Index_T = unsigned int> class Sfc_internal
+template<unsigned int Dimensions, class Index_T = unsigned int> class Sfc_common
 {
 
 public:
@@ -223,9 +223,9 @@ y
 	/*!
 	Adds cached sfc and grid indices from rhs to lhs.
 
-	Does nothing if in both instances of Sfc_internal the grid isn't identical.
+	Does nothing if in both instances of Sfc_common the grid isn't identical.
 	*/
-	Sfc_internal& operator += (const Sfc_internal& rhs)
+	Sfc_common& operator += (const Sfc_common& rhs)
 	{
 		for (unsigned int i = 0; i < Dimensions; i++) {
 			if (this->length[i] != rhs.length[i]) {
@@ -577,18 +577,18 @@ protected:
 
 
 /*!
-This version doesn't do anything.
+A Sfc class for an arbitrary number of dimensions, doesn't do anything.
 
 See documentation of Sfc<2> and Sfc<3> specializations.
 Patches implementing this for N dimensions more than welcome :)
 */
-template<unsigned int Dimensions, class Index_T = unsigned int> class Sfc : public Sfc_internal<Dimensions, Index_T> {};
+template<unsigned int Dimensions, class Index_T = unsigned int> class Sfc : public Sfc_common<Dimensions, Index_T> {};
 
 
 /*!
 Class for mapping the cells of a 2-dimensional grid to 1 dimension.
 */
-template<class Index_T> class Sfc<2, Index_T> : public Sfc_internal<2, Index_T>
+template<class Index_T> class Sfc<2, Index_T> : public Sfc_common<2, Index_T>
 {
 
 public:
@@ -608,7 +608,7 @@ public:
 	*/
 	Sfc(const boost::array<Index_T, 2>& given_length)
 	{
-		// TODO possible to move this into Sfc_internal?
+		// TODO possible to move this into Sfc_common?
 		this->fill_internal_arrays();
 		this->initialize(given_length);
 	}
@@ -809,7 +809,7 @@ private:
 /*!
 Class for mapping the cells of a 3-dimensional grid to 1 dimension.
 */
-template<class Index_T> class Sfc<3, Index_T> : public Sfc_internal<3, Index_T>
+template<class Index_T> class Sfc<3, Index_T> : public Sfc_common<3, Index_T>
 {
 
 public:
@@ -829,7 +829,7 @@ public:
 	*/
 	Sfc(const boost::array<Index_T, 3>& given_length)
 	{
-		// TODO possible to move this into Sfc_internal?
+		// TODO possible to move this into Sfc_common?
 		this->fill_internal_arrays();
 		this->initialize(given_length);
 	}
