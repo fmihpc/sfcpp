@@ -32,6 +32,14 @@ available at http://j.teresco.org//research/publications/octpart02/octpart02.pdf
 Requires http://www.boost.org/
 */
 
+/*
+TODO: See if this would speed things up:
+A new algorithm for encoding and decoding the Hilbert order,
+Ningtao Chen, Nengchao Wang and Baochang Shi,
+Softw. Pract. Exper. 37:897–908 2007,
+DOI: 10.1002/spe.793
+*/
+
 #ifndef SFC_HPP
 #define SFC_HPP
 
