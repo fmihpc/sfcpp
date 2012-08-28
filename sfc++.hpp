@@ -59,14 +59,6 @@ DOI: 10.1002/spe.793
 #include "utility"
 #include "vector"
 
-// hashing for boost arrays, from http://lists.boost.org/boost-users/2010/08/61836.php
-namespace boost {
-	template <typename T, std::size_t N> std::size_t hash_value(const boost::array<T, N>& array)
-	{
-		return boost::hash_range(array.begin(), array.end());
-	}
-}
-
 
 namespace sfc {
 
