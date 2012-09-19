@@ -2,7 +2,7 @@
 A class for mapping 2 and 3 dimensional data into 1 dimension.
 
 Copyright 2010, 2011 Ilja Honkonen
-Copyright 2011 Finnish Meteorological Institute
+Copyright 2011, 2012 Finnish Meteorological Institute
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License version 3
